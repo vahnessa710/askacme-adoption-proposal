@@ -41,7 +41,7 @@ C4Container
         SystemDb_Ext(prodsafety, "Product Safety Docs", "Confidential — pending internal ACL verification only")
     }
 
-    Enterprise_Boundary(eu, "EU Data Residency Boundary (GDPR)") {
+    System_Boundary(eu, "EU Data Residency Boundary (GDPR)") {
         SystemDb_Ext(workday, "HRIS", "Restricted — excluded from pilot; EU personal data must never leave this boundary if ever in scope")
     }
 
@@ -65,7 +65,7 @@ C4Container
     Rel(retrieval, model, "Sends authorized, grounded context")
     Rel(model, gateway, "Returns generated response")
     Rel(gateway, employee, "Returns answer")
-    Rel(eval, prod, "Gates promotion — must pass before any release")
+    Rel(eval, gateway, "Gates promotion — must pass before any release")
 ```
 
 *(Paste into a `.md` file in your repo — GitHub renders Mermaid natively. No image export needed, satisfies "rendered from the repo.")*
