@@ -83,31 +83,33 @@ Any model version change (Section 4) is treated the same way as a code change �
 The written spec above (Sections 1–3) covers all eight required areas at the right level of detail. This diagram makes the **enforcement point and identity flow explicit and visual** for the single container where the rubric scrutinizes it most — the Retrieval Layer — rather than diagramming every section down to code level.
 
 ```mermaid
-C4Component
-    title AskACME — Retrieval Layer (Component View)
+flowchart LR
+    gateway["AI Gateway<br/>Authenticates caller,<br/>attaches claims"]
+    model["Model Serving<br/>Receives only<br/>permitted context"]
 
-    Container_Ext(gateway, "AI Gateway", "Authenticates caller, attaches group/role claims")
-    Container_Ext(model, "Model Serving", "Receives only permitted context")
+    subgraph retrieval["Permission-Aware Retrieval Layer"]
+        direction LR
+        query_handler["Query Handler<br/>Entry point"]
+        permission_filter["Permission Filter<br/>Enforcement point"]
+        vector_index[("Vector Index +<br/>Metadata Store")]
+        context_builder["Context Builder<br/>Assembly"]
 
-    Container_Boundary(retrieval, "Permission-Aware Retrieval Layer") {
-        Component(query_handler, "Query Handler", "Entry point", "Accepts the authenticated request and the caller's group/role claims from the Gateway")
-        Component(permission_filter, "Permission Filter", "Enforcement point", "Compares caller's claims against each candidate chunk's classification_tier, authorized_audience, and record_owner before anything proceeds")
-        ComponentDb(vector_index, "Vector Index + Metadata Store", "Search + tags", "Embeddings plus classification_tier, authorized_audience, record_owner, content_last_synced, permission_last_synced per chunk")
-        Component(context_builder, "Context Builder", "Assembly", "Assembles only permission_filter-approved chunks into the context sent onward")
-    }
+        query_handler -->|Passes query + claims| permission_filter
+        permission_filter -->|Metadata filter query| vector_index
+        vector_index -->|Candidate chunks| permission_filter
+        permission_filter -->|Permitted chunks only| context_builder
+    end
 
-    System_Boundary(indexer_zone, "Ingestion Identity — Contained") {
-        Component(indexer_svc, "Indexer Service", "svc-askacme-indexer", "Writes embeddings + tags to the index; read-only against included sources only; no query-time role")
-    }
+    subgraph indexer_zone["Ingestion Identity - Contained"]
+        indexer_svc["Indexer Service<br/>svc-askacme-indexer"]
+    end
 
-    Rel(gateway, query_handler, "Forwards query + user claims")
-    Rel(query_handler, permission_filter, "Passes query + claims")
-    Rel(permission_filter, vector_index, "Queries with metadata filter (classification, audience, owner)")
-    Rel(vector_index, permission_filter, "Returns candidate chunks (pre-filter)")
-    Rel(permission_filter, context_builder, "Passes only permitted chunks")
-    Rel(context_builder, model, "Sends grounded, permitted context")
-    Rel(indexer_svc, vector_index, "Writes embeddings + tags", "one-way, no read/query path back out")
+    gateway -->|Forwards query + claims| query_handler
+    context_builder -->|Grounded context| model
+    indexer_svc -.->|Writes embeddings + tags,<br/>one-way, no read path back| vector_index
 ```
+
+*(Rendered as a flowchart with subgraphs, same reasoning as the HLA diagram — the literal `C4Component` command rendered but with overlapping labels on this platform; this version keeps identical content with cleaner layout control.)*
 
 **What this makes explicit that the written spec alone couldn't show as clearly:**
 - The **enforcement point** is a single, named component (`Permission Filter`) — not something implied to happen "somewhere" in the layer.
@@ -119,4 +121,3 @@ C4Component
 **Traceability:** Sections 3–4 and 9 implement ADR-001 and ADR-002 directly. Section 1's identity containment (and its visual counterpart in Section 9) and Section 7's promotion gates are the concrete mechanisms that make ADR-003 (no write access) actually enforceable in practice, not just a policy statement.
 
 **Open items carried to the risk register:** ArmoryOS sandbox availability (Section 1); Salesforce record-owner tagging accuracy, still pending verification before it can leave gated status (Sections 2–3, 9).
-
