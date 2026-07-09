@@ -6,67 +6,67 @@
 ## 1. Diagram
 
 ```mermaid
-C4Container
-    title AskACME - High-Level Architecture
+flowchart TB
+    employee["ACME Employee<br/>(Person)"]
 
-    Person(employee, "ACME Employee", "All roles")
+    subgraph idp["Identity Providers"]
+        okta["SSO Provider"]
+        ad["Directory of Record"]
+        entra["Cloud Identity Sync"]
+    end
 
-    System_Boundary(idp, "Identity Providers") {
-        System_Ext(okta, "SSO Provider", "Session auth")
-        System_Ext(ad, "Directory of Record", "Identity source")
-        System_Ext(entra, "Cloud Identity Sync", "M365 identity")
-    }
+    subgraph prod["Production Zone"]
+        gateway["AI Gateway<br/>Chokepoint"]
+        retrieval["Retrieval Layer<br/>ACL enforcement"]
+        model["Model Serving<br/>LLM inference"]
+    end
 
-    System_Boundary(prod, "Production Zone") {
-        Container(gateway, "AI Gateway", "Chokepoint", "AuthN, logging, cost attribution")
-        Container(retrieval, "Retrieval Layer", "ACL enforcement", "Tag-based, ADR-002")
-        Container(model, "Model Serving", "LLM inference", "Hosted pilot, ADR-001")
-    }
+    subgraph nonprod["Non-Production Zone"]
+        eval["Eval Harness<br/>Golden question set"]
+    end
 
-    System_Boundary(nonprod, "Non-Production Zone") {
-        Container(eval, "Eval Harness", "Golden question set", "Promotion gate")
-    }
+    subgraph included["Included Sources"]
+        hr["HR Policies"]
+        sop["Depot SOPs"]
+        wiki["Engineering Wiki"]
+        armory["Rental Inventory System"]
+        snow["ITSM Knowledge Base"]
+    end
 
-    System_Boundary(included, "Included Sources") {
-        SystemDb_Ext(hr, "HR Policies", "Internal")
-        SystemDb_Ext(sop, "Depot SOPs", "Internal")
-        SystemDb_Ext(wiki, "Engineering Wiki", "Internal")
-        SystemDb_Ext(armory, "Rental Inventory System", "Batch only")
-        SystemDb_Ext(snow, "ITSM Knowledge Base", "KBs only")
-    }
+    subgraph gated["Gated Sources - Phase 2"]
+        sfdc["CRM System"]
+        salesent["Sales Enablement Docs"]
+        prodsafety["Product Safety Docs"]
+    end
 
-    System_Boundary(gated, "Gated Sources") {
-        SystemDb_Ext(sfdc, "CRM System", "Phase 2")
-        SystemDb_Ext(salesent, "Sales Enablement Docs", "Phase 2")
-        SystemDb_Ext(prodsafety, "Product Safety Docs", "Phase 2")
-    }
+    subgraph eu["EU Data Residency"]
+        workday["HRIS"]
+    end
 
-    System_Boundary(eu, "EU Data Residency") {
-        SystemDb_Ext(workday, "HRIS", "Excluded")
-    }
+    subgraph excluded["Excluded Sources"]
+        sap["ERP System"]
+        legal["Legal Claims Repository"]
+        corpdev["Corporate Development Docs"]
+    end
 
-    System_Boundary(excluded, "Excluded Sources") {
-        SystemDb_Ext(sap, "ERP System", "Excluded")
-        SystemDb_Ext(legal, "Legal Claims Repository", "Excluded")
-        SystemDb_Ext(corpdev, "Corporate Development Docs", "Excluded")
-    }
-
-    Rel(employee, gateway, "Sends query")
-    Rel(gateway, idp, "Authenticates")
-    Rel(gateway, retrieval, "Forwards request")
-    Rel(retrieval, hr, "Reads")
-    Rel(retrieval, sop, "Reads")
-    Rel(retrieval, wiki, "Reads")
-    Rel(retrieval, armory, "Reads")
-    Rel(retrieval, snow, "Reads")
-    Rel(retrieval, sfdc, "Blocked")
-    Rel(retrieval, salesent, "Blocked")
-    Rel(retrieval, prodsafety, "Blocked")
-    Rel(retrieval, model, "Sends context")
-    Rel(model, gateway, "Returns response")
-    Rel(gateway, employee, "Returns answer")
-    Rel(eval, gateway, "Gates promotion")
+    employee -->|Sends query| gateway
+    gateway -->|Authenticates| idp
+    gateway -->|Forwards request| retrieval
+    retrieval -->|Reads| hr
+    retrieval -->|Reads| sop
+    retrieval -->|Reads| wiki
+    retrieval -->|Reads| armory
+    retrieval -->|Reads| snow
+    retrieval -.->|Blocked| sfdc
+    retrieval -.->|Blocked| salesent
+    retrieval -.->|Blocked| prodsafety
+    retrieval -->|Sends context| model
+    model -->|Returns response| gateway
+    gateway -->|Returns answer| employee
+    eval -->|Gates promotion| gateway
 ```
+
+*(Note: rendered as a standard flowchart with subgraphs rather than the literal `C4Container` Mermaid command, due to a rendering bug in that command on this platform — confirmed by testing minimal placeholder content, which failed identically. The content still represents container-altitude architecture: boxes are containers/systems, nested groupings are trust boundaries — same substance the ARB rubric asks for, just a more stable notation.)*
 
 *(Paste into a `.md` file in your repo — GitHub renders Mermaid natively. No image export needed, satisfies "rendered from the repo.")*
 
