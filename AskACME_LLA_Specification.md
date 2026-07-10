@@ -84,8 +84,17 @@ The written spec above (Sections 1–3) covers all eight required areas at the r
 
 ```mermaid
 flowchart LR
+    subgraph identity["Identity Stack"]
+        direction LR
+        ad["On-prem AD<br/>Source of truth"]
+        entra["Entra ID<br/>Synced from AD"]
+        okta["Okta<br/>SSO / SCIM"]
+        ad -->|Syncs to| entra
+        entra -->|Backs| okta
+    end
+
     gateway["AI Gateway<br/>Authenticates caller,<br/>attaches claims"]
-    model["Model Serving<br/>Receives only<br/>permitted context"]
+    model["Model Serving<br/>Azure OpenAI pilot<br/>(self-hosted fallback)"]
 
     subgraph retrieval["Permission-Aware Retrieval Layer"]
         direction LR
@@ -102,14 +111,17 @@ flowchart LR
 
     subgraph indexer_zone["Ingestion Identity - Contained"]
         indexer_svc["Indexer Service<br/>svc-askacme-indexer"]
+        cyberark["CyberArk<br/>Quarterly recertification"]
+        indexer_svc -.->|Managed by| cyberark
     end
 
+    okta -->|Validates session| gateway
     gateway -->|Forwards query + claims| query_handler
     context_builder -->|Grounded context| model
     indexer_svc -.->|Writes embeddings + tags,<br/>one-way, no read path back| vector_index
 ```
 
-*(Rendered as a flowchart with subgraphs, same reasoning as the HLA diagram — the literal `C4Component` command rendered but with overlapping labels on this platform; this version keeps identical content with cleaner layout control.)*
+*(Rendered as a flowchart with subgraphs, same reasoning as the HLA diagram — the literal `C4Component` command rendered but with overlapping labels on this platform; this version keeps identical content with cleaner layout control. Model Serving is named concretely here per ADR-001, since LLA is the altitude for real technology selections — unlike the HLA, which stays generic by convention. The Vector Index remains intentionally unnamed: no specific product has actually been selected yet, and naming one here would misrepresent an undecided choice as a decision.)*
 
 **What this makes explicit that the written spec alone couldn't show as clearly:**
 - The **enforcement point** is a single, named component (`Permission Filter`) — not something implied to happen "somewhere" in the layer.
