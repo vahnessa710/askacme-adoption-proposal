@@ -1,5 +1,6 @@
 # AskACME — High-Level Architecture (HLA) Package
 **Day 2, Deliverable 1** · C4 Container altitude · No product names, per ARB convention
+**Rev 2** — permission check moved ahead of the AI Gateway per instructor feedback (see §3)
 
 ---
 
@@ -15,10 +16,12 @@ flowchart TB
         entra["Cloud Identity Sync"]
     end
 
+    permcheck["Permission Check<br/>Who is this, what can they see"]
+
     subgraph prod["Production Zone"]
-        gateway["AI Gateway<br/>Chokepoint"]
-        retrieval["Retrieval Layer<br/>ACL enforcement"]
-        model["Model Serving<br/>LLM inference"]
+        gateway["AI Gateway<br/>Logging, routing, cost tracking"]
+        retrieval["Retrieval Layer<br/>Document-level ACL, read-only"]
+        model["Model Serving<br/>Hosting decision pending"]
     end
 
     subgraph nonprod["Non-Production Zone"]
@@ -49,9 +52,10 @@ flowchart TB
         corpdev["Corporate Development Docs"]
     end
 
-    employee -->|Sends query| gateway
-    gateway -->|Authenticates| idp
-    gateway -->|Forwards request| retrieval
+    employee -->|Sends query| permcheck
+    permcheck -->|Checks identity + role| idp
+    permcheck -->|Forwards, only if allowed| gateway
+    gateway -->|Routes request| retrieval
     retrieval -->|Reads| hr
     retrieval -->|Reads| sop
     retrieval -->|Reads| wiki
@@ -66,19 +70,21 @@ flowchart TB
     eval -->|Gates promotion| gateway
 ```
 
-*(Note: rendered as a standard flowchart with subgraphs rather than the literal `C4Container` Mermaid command, due to a rendering bug in that command on this platform — confirmed by testing minimal placeholder content, which failed identically. The content still represents container-altitude architecture: boxes are containers/systems, nested groupings are trust boundaries — same substance the ARB rubric asks for, just a more stable notation.)*
-
-*(Paste into a `.md` file in your repo — GitHub renders Mermaid natively. No image export needed, satisfies "rendered from the repo.")*
+*(Rendered as a flowchart with subgraphs — same container-altitude content the ARB rubric asks for, just a stable Mermaid syntax. Paste into a `.md` file in your repo; GitHub renders Mermaid natively.)*
 
 ---
 
 ## 2. One-Page Narrative
 
-**Components.** Four containers carry the system: an **AI Gateway** (the mandatory chokepoint — authN, logging, redaction, per-team cost attribution, satisfying the no-shadow-AI and cost-visibility requirements), a **Permission-Aware Retrieval Layer** (enforces Public→Restricted classification at query time — the model never sees a forbidden chunk), **Model Serving** (the LLM itself — intentionally unnamed at this altitude), and an **Eval Harness** sitting in a separate Non-Production zone, running the golden question set (normal + honeypot cases) before anything promotes to Production.
+**Components.** Five containers carry the system now, not four. A **Permission Check** sits in front of everything else — it confirms who the caller is and what role they hold, using the Identity Providers, before the request is allowed to proceed at all. Only then does it reach the **AI Gateway** (logging, routing, per-team cost attribution), the **Retrieval Layer** (document-level ACL enforcement — the model never sees a forbidden chunk), and **Model Serving** (intentionally unnamed at this altitude). An **Eval Harness** sits in a separate Non-Production zone, running the golden question set (normal + honeypot cases) before anything promotes to Production.
 
-**Trust boundaries.** Three boundaries matter here: **Production vs. Non-Production** (separates the live assistant from where new versions are tested — a SOX-driven line, since developers cannot deploy their own changes straight to Production); the **EU Data Residency boundary** (GDPR — wraps any source containing EU personal data; currently only the excluded HRIS sits here, but the boundary is drawn regardless of current scope so it's structurally ready if that ever changes); and the **Identity boundary**, where the Gateway authenticates every caller before a query reaches retrieval.
+**Why permission is checked twice.** This isn't redundant — it's two different questions, answered at two different points, because only one of them can be answered early:
+- *"Is this a real, active employee, and what's their role?"* — answerable immediately, at the front door, before any other work happens. A rejected request never touches the Gateway, the Retrieval Layer, or the model.
+- *"Can this specific employee see this specific document?"* — only answerable at the Retrieval Layer, because document-level permissions live with the data itself (SharePoint site permissions, Salesforce sharing rules, etc.), not with the identity system.
 
-**Data flows.** An employee's query passes through the Gateway (authenticated against the identity boundary), into the Retrieval Layer, which reads only from the five **included** pilot sources, then forwards grounded context to Model Serving, and returns an answer back through the Gateway. All flows are **read-only** in this phase — per ADR-003, no write/action capability is in scope for the pilot. This means PartyPal's booking/action role for Events Ops remains untouched and undisplaced by this phase; that gap is logged as a Phase 2 item, not silently absorbed into this architecture.
+**Trust boundaries.** Four boundaries now matter: the **Permission boundary** (new — everything before it is unauthenticated/unauthorized, everything after is a checked, role-known request); **Production vs. Non-Production** (SOX-driven — developers cannot deploy their own changes straight to Production); the **EU Data Residency boundary** (GDPR — wraps any source containing EU personal data; currently only the excluded HRIS sits here); and the **document-level ACL boundary** inside Retrieval.
+
+**Data flows.** An employee's query first passes the Permission Check (against Identity Providers). Only allowed requests enter the Production Zone: Gateway → Retrieval Layer (reads only the five **included** pilot sources) → Model Serving → back through the Gateway to the employee. All flows are **read-only** in this phase — per ADR-003, no write/action capability is in scope for the pilot. PartyPal's booking/action role for Events Ops remains untouched and undisplaced by this phase; that gap is logged as a Phase 2 item, not silently absorbed into this architecture.
 
 **Integration points & Day 1 traceability.** Every Day 1 data source is accounted for:
 
@@ -92,6 +98,10 @@ No integration is a "write" action in this phase — the assistant only reads. W
 
 ---
 
+## 3. Revision note (why the order changed)
+
+Original draft had the Gateway authenticate, then forward to Retrieval for ACL enforcement. Instructor feedback: permission should be checked **before** the request enters the Gateway, so the diagram reads cleanly as "check first, then process." Revised design keeps the Retrieval Layer's document-level ACL job (it's the only component with access to document-level classification data) but adds an explicit front-door Permission Check that rejects bad requests before they reach the Gateway, Retrieval, or the model at all.
+
 **Deferred to LLA (next deliverable):** the 5-stage environment promotion path (DEV→SIT→UAT→PREPROD→PROD), specific model-hosting choice, chunking/embedding strategy, and concrete authN/authZ configuration.
 
-**Traceability to ADRs:** Model Serving → ADR-001 (hosting choice, contingent on DPA verification). Retrieval Layer → ADR-002 (ingestion-time tagging, dual refresh cadence). Absence of any write relationship in this diagram → ADR-003 (no write access in pilot).
+**Traceability to ADRs:** Model Serving → ADR-001 (hosting choice, contingent on DPA verification). Retrieval Layer → ADR-002 (ingestion-time tagging, dual refresh cadence). Permission Check → new front-door authorization step, to be formalized as its own ADR candidate if defended before the ARB. Absence of any write relationship in this diagram → ADR-003 (no write access in pilot).
